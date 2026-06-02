@@ -75,9 +75,9 @@ media/
 **/media/
 
 # === C# / .NET original source (not part of Python port) ===
-HourBoostr/HourBoostr/
-HourBoostr/Settings/
-HourBoostr/HourBoostr.sln
+HourBoostr/
+Settings/
+HourBoostr.sln
 SingleBoostr/
 Bubbles.json
 donation.json
