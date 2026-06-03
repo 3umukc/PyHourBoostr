@@ -1,30 +1,179 @@
 <p align="center">
-  <img src="http://i.imgur.com/MJN4zty.png"/>
-  <h2 align="center"><a href="https://github.com/Ezzpify/HourBoostr/releases">DOWNLOAD HERE</a></h2>
+  <img src="https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Steam-ValvePython-green?logo=steam&logoColor=white" alt="Steam">
+  <img src="https://img.shields.io/badge/GUI-PyQt6-purple?logo=qt&logoColor=white" alt="PyQt6">
+  <img src="https://img.shields.io/badge/CLI-Colorama-yellow?logo=gnubash&logoColor=white" alt="CLI">
+  <br>
+  <img src="https://img.shields.io/github/license/skadelait-blip/PyHourBoostr" alt="License">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
+  <img src="https://img.shields.io/badge/status-active-brightgreen" alt="Status">
 </p>
 
-[![License](https://img.shields.io/github/license/Ezzpify/HourBoostr.svg?label=License&maxAge=86400)](./LICENSE)
-[![GitHub Release](https://img.shields.io/github/release/Ezzpify/HourBoostr.svg?label=Latest&maxAge=60)](https://github.com/Ezzpify/HourBoostr/releases/latest)
-[![Total Downloads](https://img.shields.io/badge/Total%20Downloads-84k-brightgreen.svg)](https://github.com/Ezzpify/HourBoostr/releases/latest)
-[![Github Downloads](https://img.shields.io/github/downloads/Ezzpify/HourBoostr/latest/total.svg?label=Downloads%20for%20latest&maxAge=60)](https://github.com/Ezzpify/HourBoostr/releases/latest)
+---
 
-[![Steam Group](https://img.shields.io/badge/Steam-group-yellowgreen.svg)](https://steamcommunity.com/groups/hourboostr)
-[![Discord](https://img.shields.io/badge/Discord-join-yellowgreen.svg)](https://discord.gg/g4M9fTs)
+# 🎮 PyHourBoostr
 
-# General information
+**Python-порт HourBoostr** — фармит игровые часы в Steam без установленного Steam-клиента.
 
-HourBoostr and SingleBoostr are two applications developed to idle games on your Steam accounts. The two programs work differently - and depending on how you to idle, you may want to pick one over the other. Neither applications require you to have the game you want to boost installed, but you do need to own the game in your library.
+Поддерживает несколько аккаунтов одновременно, SteamGuard (email + 2FA), login_key и работу на headless-серверах.
 
-## HourBoostr
+> 🧠 **Original idea & C# version:** [Ezzpify/HourBoostr](https://github.com/Ezzpify/HourBoostr)
 
-This program acts like a stand-alone Steam client and will require you to enter your Steam account details. The perks of this application is that you can idle several accounts at once, and you do not need to have Steam installed on the PC you are running it on, which means you can rent a VPS and keep it running for weeks on end. So if you're looking to boost multiple accounts at once on accounts you are not using at the time, this is perfect for you. However, if you are only using one account and you also want to be online and play other games or chat with friends, this will not work very well since you can not be logged in at two locations at the same time. If you want this feature, scroll down and read about SingleBoostr. There is no option to farm trading cards with HourBoostr. If you are looking for this feature then check out SingleBoostr. If you want to farm cards on multiple accounts at once I recommend checking out [Archi Steam Farm](https://github.com/JustArchi/ArchiSteamFarm).
+---
 
-Video tutorial of HourBoostr: https://www.youtube.com/watch?v=eqhPBEVMPDM
+## 📦 Установка
 
-## SingleBoostr
+### Требования
 
-This program is perfect for you if you only have one account that you want to boost. This program requires you to have Steam installed, however you can be logged into your account and play games and chat with your friends while you are boosting other games with SingleBoostr at the same time. SingleBoostr also offers a great way to farm Trading Cards.
+- Python **3.11+**
+- `pip`
+- (Linux) `python3-venv`, `python3-dev`
 
-Program preview of SingleBoostr: 
+---
 
-![Preview](http://i.imgur.com/nHiLGia.png)
+### Windows
+
+```powershell
+# Клонируем репозиторий
+git clone https://github.com/skadelait-blip/PyHourBoostr.git
+cd PyHourBoostr
+
+# Создаём виртуальное окружение
+python -m venv venv
+.\venv\Scripts\activate
+
+# Ставим зависимости
+pip install -r requirements.txt
+```
+
+### Linux / macOS
+
+```bash
+# Клонируем
+git clone https://github.com/skadelait-blip/PyHourBoostr.git
+cd PyHourBoostr
+
+# Виртуальное окружение
+python3 -m venv venv
+source venv/bin/activate
+
+# Зависимости
+pip install -r requirements.txt
+
+# На headless-сервере (без GUI) ставьте только CLI-зависимости:
+pip install steam[client] colorama pycryptodomex
+```
+
+---
+
+## 🚀 Запуск
+
+### GUI (PyQt6) — только Windows
+
+```powershell
+python run_gui.py
+```
+
+### CLI — Windows / Linux / macOS
+
+```bash
+python main.py
+```
+
+Бот прочитает аккаунты из `Settings.json`, подключится к Steam и начнёт фармить часы.
+
+---
+
+## ⚙️ Настройка
+
+Создайте `Settings.json` рядом с `main.py`:
+
+```json
+{
+    "accounts": [
+        {
+            "details": {
+                "username": "your_login",
+                "password": "your_password",
+                "login_key": ""
+            },
+            "games": [730]
+        }
+    ]
+}
+```
+
+> 🔒 `Settings.json` добавлен в `.gitignore` — никогда не попадёт в репозиторий.
+
+**Параметры аккаунта:**
+
+| Поле | Описание |
+|------|----------|
+| `username` | Логин Steam |
+| `password` | Пароль (будет автоматически очищен от пробелов) |
+| `login_key` | Ключ для входа без пароля (заполняется автоматически после первого входа) |
+| `games` | Список AppID игр (через запятую, макс. 32) |
+
+**Глобальные настройки:**
+
+| Поле | Описание |
+|------|----------|
+| `check_for_updates` | Проверять обновления при старте |
+| `hide_to_tray` | Сворачивать в трей |
+
+---
+
+## 🛡️ SteamGuard / 2FA
+
+- При запросе кода **email** — бот попросит ввести код из письма
+- При запросе **2FA** (мобильный аутентификатор) — введите код из приложения Steam
+- После успешного входа Steam выдаёт `login_key` — следующие входы будут без пароля
+- Sentry-файлы хранятся в папке `Sentryfiles/` (игнорируется git)
+
+---
+
+## 📁 Структура проекта
+
+```
+.
+├── bot.py              # Логика бота для одного аккаунта
+├── steam_client.py     # Обёртка ValvePython SteamClient + фиксы
+├── gui.py              # PyQt6 интерфейс
+├── session.py          # CLI-менеджер сессий
+├── config.py           # Модели данных
+├── settings_manager.py # Чтение/запись Settings.json
+├── endpoints.py        # Константы путей
+├── logger.py           # Логирование
+├── main.py             # Точка входа CLI
+├── run_gui.py          # Точка входа GUI
+├── requirements.txt    # Зависимости
+├── Settings.json       # ⚠️ Аккаунты (не коммитить!)
+├── Sentryfiles/        # Sentry-файлы Steam (не коммитить!)
+└── Logs/               # Логи работы (не коммитить!)
+```
+
+---
+
+## 🐍 Чем отличается от C# оригинала
+
+| Оригинал (C#) | PyHourBoostr (Python) |
+|---------------|----------------------|
+| SteamKit2 | ValvePython `steam[client]` |
+| Только Windows | Windows / Linux / macOS |
+| .NET Framework | Python 3.11+ |
+| GUI только WinForms | PyQt6 GUI + CLI |
+| `login_key` не сохраняется | `login_key` сохраняется в Settings.json |
+| Пробелы в пароле — ошибка | Пароль автоматически стриппится |
+
+---
+
+## 🧑‍💻 Авторы
+
+- **Ezzpify** — оригинальная идея и [C# реализация](https://github.com/Ezzpify/HourBoostr)
+- **skadelait-blip** — Python-порт (ValvePython, PyQt6, фиксы совместимости)
+
+---
+
+## 📄 Лицензия
+
+[MIT](LICENSE)
