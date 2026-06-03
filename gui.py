@@ -30,6 +30,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import Settings, AccountSettings, AccountDetails
 from settings_manager import get_settings, save_settings
 from endpoints import SETTINGS_FILE_PATH, LOG_FOLDER_PATH
+from logger import Logger, LogLevel
+
+_gui_log = Logger("GUI", os.path.join(LOG_FOLDER_PATH, "gui.log"))
 
 
 class BotWorker(QThread):
@@ -331,32 +334,44 @@ class AccountDialog(QDialog):
         if m:
             vanity = m.group(1)
             url = f"https://steamcommunity.com/id/{vanity}?xml=1"
+            _gui_log.info(f"Fetching SteamID from: {url}")
             req = urllib.request.Request(url, headers={"User-Agent": "PyHourBoostr/1.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
-                xml_data = resp.read().decode("utf-8", errors="replace")
-            root = ET.fromstring(xml_data)
+                raw = resp.read()
+            _gui_log.info(f"Profile response ({len(raw)} bytes), starts with: {raw[:200]!r}")
+            if raw.lstrip()[:1] != b"<" or b"steamID64" not in raw:
+                _gui_log.warn("Response is not valid profile XML — no <steamID64> found")
+                return None
+            root = ET.fromstring(raw.decode("utf-8", errors="replace"))
             steamid_elem = root.find("steamID64")
             if steamid_elem is not None and steamid_elem.text:
-                return steamid_elem.text.strip()
+                steamid = steamid_elem.text.strip()
+                _gui_log.success(f"Resolved SteamID64: {steamid}")
+                return steamid
         return None
 
     def _fetch_owned_games_xml(self, steamid: str):
         """Fetch games via Community XML feed. Returns list, None (empty), or 'auth'."""
         try:
             url = f"https://steamcommunity.com/profiles/{steamid}/games/?tab=all&xml=1"
+            _gui_log.info(f"Fetching games XML from: {url}")
             req = urllib.request.Request(url, headers={"User-Agent": "PyHourBoostr/1.0"})
             with urllib.request.urlopen(req, timeout=15) as resp:
                 raw = resp.read()
-            # Check if response is HTML (auth page) vs XML
+            _gui_log.info(f"Games response ({len(raw)} bytes)")
+            _gui_log.debug(f"First 300 bytes: {raw[:300]!r}")
             if raw.lstrip()[:1] == b"<" and raw.lstrip()[:5] != b"<?xml":
+                _gui_log.warn("Response starts with < but is not XML — likely HTML login page")
                 return "auth"
             xml_data = raw.decode("utf-8", errors="replace")
             root = ET.fromstring(xml_data)
             error_elem = root.find("error")
             if error_elem is not None:
+                _gui_log.warn(f"XML feed returned error: {error_elem.text}")
                 return "auth"
             games_elem = root.find("games")
             if games_elem is None:
+                _gui_log.info("No <games> element in response")
                 return None
             games = []
             for game in games_elem.findall("game"):
@@ -366,8 +381,10 @@ class AccountDialog(QDialog):
                     appid = int(appid_elem.text.strip())
                     name = name_elem.text.strip() if name_elem is not None and name_elem.text else f"Unknown ({appid})"
                     games.append({"appid": appid, "name": name, "playtime_forever": 0})
+            _gui_log.info(f"Parsed {len(games)} games from XML feed")
             return sorted(games, key=lambda g: g["name"].lower()) if games else None
-        except Exception:
+        except Exception as e:
+            _gui_log.error(f"Games XML fetch failed: {e}")
             return "auth"
 
     def _fetch_owned_games_api(self, steamid: str, api_key: str) -> list:
