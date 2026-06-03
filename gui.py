@@ -8,7 +8,8 @@ import json
 import re
 import urllib.request
 import urllib.parse
-from typing import Optional
+import xml.etree.ElementTree as ET
+from typing import Optional, List
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
@@ -254,18 +255,7 @@ class AccountDialog(QDialog):
         return self.account
     
     def _import_games(self):
-        """Import games from Steam library via Web API"""
-        from endpoints import STEAM_RESOLVE_VANITY, STEAM_GET_OWNED_GAMES
-        
-        api_key, ok = QInputDialog.getText(
-            self, "Steam Web API Key",
-            "Paste your Steam Web API key:\n(Get one at https://steamcommunity.com/dev/apikey)",
-            text=self._get_api_key()
-        )
-        if not ok or not api_key.strip():
-            return
-        api_key = api_key.strip()
-        
+        """Import games from Steam library (no API key required)"""
         profile_url, ok = QInputDialog.getText(
             self, "Steam Profile",
             "Paste your Steam profile URL or SteamID64:\n"
@@ -276,57 +266,109 @@ class AccountDialog(QDialog):
         )
         if not ok or not profile_url.strip():
             return
-        
+
         try:
-            steamid = self._resolve_steamid(profile_url.strip(), api_key)
+            # Step 1: resolve SteamID (no key needed for profiles/steamID64)
+            steamid = self._resolve_steamid_no_key(profile_url.strip())
             if not steamid:
                 QMessageBox.warning(self, "Error", "Could not resolve Steam ID from that URL")
                 return
-            
-            games = self._fetch_owned_games(steamid, api_key)
+
+            # Step 2: try XML feed (no API key)
+            games = self._fetch_owned_games_xml(steamid)
+            if games is None:
+                # XML feed failed (private profile etc) — fallback to API key
+                api_key, ok = QInputDialog.getText(
+                    self, "Steam Web API Key (Optional)",
+                    "Library is private or feed unavailable.\n"
+                    "Enter Steam Web API key to use Web API instead:\n"
+                    "(Get one free at https://steamcommunity.com/dev/apikey)",
+                    text=self._get_api_key()
+                )
+                if not ok or not api_key.strip():
+                    return
+                api_key = api_key.strip()
+                games = self._fetch_owned_games_api(steamid, api_key)
+                # Save key for next time
+                parent = self.parent()
+                if parent and hasattr(parent, 'settings') and parent.settings:
+                    parent.settings.steam_api_key = api_key
+                    from settings_manager import save_settings
+                    save_settings(parent.settings)
+
             if not games:
                 QMessageBox.information(self, "No Games", "No games found or library is private")
                 return
-            
+
             self._show_game_picker(games)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to import games:\n{e}")
-    
+
     def _get_api_key(self):
         """Get Steam API key from parent MainWindow settings"""
         parent = self.parent()
         if parent and hasattr(parent, 'settings') and parent.settings:
             return parent.settings.steam_api_key
         return ""
-    
-    def _resolve_steamid(self, input_str: str, api_key: str) -> Optional[str]:
-        """Resolve a profile URL or raw SteamID to steamID64"""
+
+    def _resolve_steamid_no_key(self, input_str: str) -> Optional[str]:
+        """Resolve a profile URL or raw SteamID to steamID64 without API key"""
         # Already a steamID64 (17 digits)
         m = re.match(r'^(\d{17})$', input_str)
         if m:
             return m.group(1)
-        
+
         # https://steamcommunity.com/profiles/76561197960287930
         m = re.search(r'steamcommunity\.com/profiles/(\d{17})', input_str)
         if m:
             return m.group(1)
-        
-        # https://steamcommunity.com/id/customname
+
+        # https://steamcommunity.com/id/customname — use XML feed to resolve
         m = re.search(r'steamcommunity\.com/id/([a-zA-Z0-9_-]+)', input_str)
         if m:
             vanity = m.group(1)
-            url = f"{STEAM_RESOLVE_VANITY}?key={api_key}&vanityurl={vanity}"
-            with urllib.request.urlopen(url, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-            result = data.get('response', {})
-            if result.get('success') == 1:
-                return result.get('steamid')
-            return None
-        
+            url = f"https://steamcommunity.com/id/{vanity}?xml=1"
+            req = urllib.request.Request(url, headers={"User-Agent": "PyHourBoostr/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                xml_data = resp.read().decode("utf-8", errors="replace")
+            root = ET.fromstring(xml_data)
+            steamid_elem = root.find("steamID64")
+            if steamid_elem is not None and steamid_elem.text:
+                return steamid_elem.text.strip()
+
         return None
-    
-    def _fetch_owned_games(self, steamid: str, api_key: str) -> list:
-        """Fetch owned games from Steam library"""
+
+    def _fetch_owned_games_xml(self, steamid: str) -> Optional[list]:
+        """Fetch owned games using Steam Community XML feed (no API key). Returns None if failed."""
+        try:
+            url = f"https://steamcommunity.com/profiles/{steamid}/games/?tab=all&xml=1"
+            req = urllib.request.Request(url, headers={"User-Agent": "PyHourBoostr/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                xml_data = resp.read().decode("utf-8", errors="replace")
+            root = ET.fromstring(xml_data)
+            error_elem = root.find("error")
+            if error_elem is not None:
+                return None
+            games_elem = root.find("games")
+            if games_elem is None:
+                return None
+            games = []
+            for game in games_elem.findall("game"):
+                appid_elem = game.find("appID")
+                name_elem = game.find("name")
+                if appid_elem is not None and appid_elem.text:
+                    appid = int(appid_elem.text.strip())
+                    name = name_elem.text.strip() if name_elem is not None and name_elem.text else f"Unknown ({appid})"
+                    games.append({"appid": appid, "name": name, "playtime_forever": 0})
+            if not games:
+                return None
+            return sorted(games, key=lambda g: g["name"].lower())
+        except Exception:
+            return None
+
+    def _fetch_owned_games_api(self, steamid: str, api_key: str) -> list:
+        """Fetch owned games using Steam Web API (requires API key)"""
+        from endpoints import STEAM_GET_OWNED_GAMES
         url = f"{STEAM_GET_OWNED_GAMES}?key={api_key}&steamid={steamid}&include_appinfo=true&format=json"
         with urllib.request.urlopen(url, timeout=15) as resp:
             data = json.loads(resp.read().decode())
